@@ -110,47 +110,35 @@ When AI assists with development, it MUST:
 All tests MUST use a shared `Seeds/` folder. **Only Seeds can call repository functions directly.**
 
 - `TestSeeds.swift` - Factory methods to create test data via repositories
-- `TestDependencyContainer.swift` - Test-specific DependencyContainer with in-memory storage
+- **Same `DependencyContainer` class for both production and tests** - use builder pattern to inject different dependencies
 - Seed data MUST be deterministic (fixed UUIDs, dates, content)
 - Seeds MUST be usable by both unit tests and UI tests
 
 ```swift
-// ✅ Correct: TestDependencyContainer for tests
-@MainActor
-final class TestDependencyContainer {
-    let coreDataStack = InMemoryCoreDataStack()
-    
-    lazy var noteRepository: NoteRepositoryProtocol = NoteRepository(coreDataStack: coreDataStack)
-    lazy var folderRepository: FolderRepositoryProtocol = FolderRepository(coreDataStack: coreDataStack)
-    
-    func makeNoteEditorViewModel(noteId: UUID? = nil, folderId: UUID? = nil) -> NoteEditorViewModel {
-        NoteEditorViewModel(
-            noteId: noteId,
-            folderId: folderId,
-            createNoteUseCase: CreateNoteUseCase(repository: noteRepository),
-            updateNoteUseCase: UpdateNoteUseCase(repository: noteRepository),
-            getNoteUseCase: GetNoteUseCase(repository: noteRepository),
-            moveNoteToFolderUseCase: MoveNoteToFolderUseCase(repository: noteRepository),
-            getFoldersUseCase: GetFoldersUseCase(repository: folderRepository)
-        )
-    }
-}
+// ✅ Correct: Same DependencyContainer with builder pattern for tests
+// Tests use DependencyContainer.create() with in-memory CoreData
+let container = DependencyContainer.create()
+    .withCoreDataStack(InMemoryCoreDataStack())
+    .withAPIConfiguration(.local)
 
 // ✅ Correct: Seeds can call repository functions
+@MainActor
 struct TestSeeds {
-    static func createTestNote(using container: TestDependencyContainer, content: String = "Test") async throws -> Note {
+    static func createTestNote(using container: DependencyContainer, content: String = "Test") async throws -> Note {
         try await container.noteRepository.create(content: content, folderId: nil)
     }
     
-    static func createTestFolder(using container: TestDependencyContainer, name: String = "Folder") async throws -> Folder {
+    static func createTestFolder(using container: DependencyContainer, name: String = "Folder") async throws -> Folder {
         try await container.folderRepository.create(name: name)
     }
 }
 
 // ✅ Correct: Test only calls ViewModel functions, creates via DependencyContainer
 func testMoveNoteToFolder_MovesSuccessfully() async throws {
-    // Arrange - Create via DependencyContainer
-    let container = TestDependencyContainer()
+    // Arrange - Create via DependencyContainer with builder pattern
+    let container = DependencyContainer.create()
+        .withCoreDataStack(InMemoryCoreDataStack())
+        .withAPIConfiguration(.local)
     let note = try await TestSeeds.createTestNote(using: container)
     let folder = try await TestSeeds.createTestFolder(using: container)
     let viewModel = container.makeNoteEditorViewModel(noteId: note.id)

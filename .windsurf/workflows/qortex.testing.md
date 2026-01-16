@@ -59,7 +59,9 @@ final class InMemoryCoreDataStack: CoreDataStack {
 
 ### 3. Create TestSeeds
 
-Seeds are the ONLY place that can call repository functions directly:
+Seeds are the ONLY place that can call repository functions directly.
+
+**Key principle**: Use the same `DependencyContainer` class for both production and tests. Tests inject different dependencies via builder pattern.
 
 ```swift
 // TestSeeds.swift
@@ -100,7 +102,9 @@ struct TestSeeds {
 
 ### 4. Write Integration Tests (TDD Red Phase)
 
-Write failing tests FIRST that define expected behavior:
+Write failing tests FIRST that define expected behavior.
+
+**Key principle**: Same `DependencyContainer` class for production and tests. Tests use builder pattern to inject in-memory storage:
 
 ```swift
 // NoteEditorViewModelIntegrationTests.swift
@@ -113,7 +117,7 @@ final class NoteEditorViewModelIntegrationTests: XCTestCase {
     
     override func setUp() {
         super.setUp()
-        // Use builder pattern to inject in-memory CoreData
+        // Same DependencyContainer, different dependencies via builder pattern
         container = DependencyContainer.create()
             .withCoreDataStack(InMemoryCoreDataStack())
             .withAPIConfiguration(.local)
