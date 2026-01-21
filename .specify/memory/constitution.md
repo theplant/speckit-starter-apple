@@ -1,16 +1,18 @@
 <!--
 Sync Impact Report
 ==================
-- Version change: 5.0.0 → 5.1.0 (MINOR: Hybrid repository approach)
+- Version change: 5.1.0 → 5.2.0 (MINOR: Shift to UI-only testing strategy)
 - Modified principles:
-  - VII. OpenAPI-Unified Architecture → VII. Hybrid Repository Architecture
+  - IV. Testability First (ViewModel-Only Testing) → IV. Testability First (UI-Only Testing)
+  - VI. Test-Driven Development (TDD) → Updated to reflect UI-testing focus
 - Modified sections:
-  - Repository Strategy: OpenAPI for sync-capable data, direct CoreData for local-only data
-  - Added guidance on when to use each approach
-- Templates requiring updates: ✅ reviewed (no updates needed - templates are generic)
+  - Test Coverage Requirements: Focus shifted to UI layer
+  - Pre-Review Checklist: Updated for UI test validation
+- Templates requiring updates:
+  - ✅ specs/001-lwt-worksheet-printer/plan.md updated
+  - ✅ specs/001-lwt-worksheet-printer/quickstart.md updated
 - Follow-up TODOs: None
-- Rationale: Not all data needs remote sync. Local-only data (settings, cache, drafts) should use
-  direct CoreData for simplicity. Sync-capable data (notes, folders) uses OpenAPI for remote/local.
+- Rationale: Simplifying the testing strategy to focus on end-to-end user journeys via UI testing, reducing the overhead of maintaining both integration and UI tests while ensuring critical paths are verified.
 -->
 
 # Apple Platform Clean Architecture Constitution
@@ -50,19 +52,15 @@ All layer boundaries MUST be defined by Swift protocols (interfaces).
 
 **Rationale**: Protocol boundaries enable mocking for tests, allow swapping implementations (e.g., switching from CoreData to Realm), and enforce the dependency rule at compile time.
 
-### IV. Testability First (ViewModel-Only Testing)
+### IV. Testability First (UI-Only Testing)
 
-All business logic MUST be testable through ViewModel functions only. **Tests MUST NOT call repository or use case functions directly** - only Seeds are allowed to call repository functions for data setup.
+All business logic and user journeys MUST be testable through UI tests only. **Tests MUST NOT call repository, use case, or ViewModel functions directly** - they must interact with the application through the UI layer.
 
-- **Tests MUST only call ViewModel public methods** - this mirrors real user interactions
-- **Tests MUST create ViewModels via DependencyContainer** - ensures consistent dependency wiring
-- **Seeds are the ONLY place allowed to call repository functions** - for test data setup
-- **Entity tests are NOT required** - entities are tested implicitly through ViewModel tests
-- **Repository tests are NOT required** - repositories are tested implicitly through ViewModel tests
-- **Use Case tests are NOT required** - use cases are tested implicitly through ViewModel tests
-- UI tests MUST use the same seeds as integration tests for consistency
+- **Tests MUST only interact with the app via accessibility identifiers** - this ensures tests reflect real user behavior.
+- **Seeds are the ONLY place allowed to setup data** - using specialized backdoors or mock data injection for predictable states.
+- **Unit/Integration tests are NOT required** - all layers (Entities, Domain, Data, Presentation) are tested implicitly through UI tests.
 
-**Rationale**: Tests should mirror real app usage. Users interact with ViewModels through the UI, not with repositories directly. By testing only through ViewModels created via DependencyContainer, we ensure the entire stack works together correctly. This catches integration bugs that layer-specific tests would miss.
+**Rationale**: UI testing ensures that the entire system works together from the user's perspective. It eliminates the need for maintaining multiple levels of testing while guaranteeing that the primary value delivered to the user is verified and functional.
 
 ### V. SOLID Principles
 
@@ -100,10 +98,11 @@ When AI assists with development, it MUST:
 
 | Layer | Test Required | Notes |
 |-------|---------------|-------|
-| ViewModels | YES (90%) | Integration tests via DependencyContainer |
-| Entities | NO | Tested implicitly through ViewModel tests |
-| Use Cases | NO | Tested implicitly through ViewModel tests |
-| Repositories | NO | Tested implicitly through ViewModel tests |
+| UI | YES (100% of Critical Paths) | E2E journeys via XCUITest |
+| ViewModels | NO | Tested implicitly through UI tests |
+| Entities | NO | Tested implicitly through UI tests |
+| Use Cases | NO | Tested implicitly through UI tests |
+| Repositories | NO | Tested implicitly through UI tests |
 
 #### Seeds-Based Testing
 
@@ -177,13 +176,11 @@ func testMoveNoteToFolder_WRONG() async throws {
 
 Before stopping for human review, AI MUST verify:
 
-- [ ] All tests compile without errors
-- [ ] All tests pass (`xcodebuild test` exits with code 0)
-- [ ] No skipped or disabled tests (no `XCTSkip`, no commented tests)
-- [ ] Edge cases are covered (empty, nil, error, boundary)
-- [ ] All ViewModels created via DependencyContainer
-- [ ] Tests only call ViewModel functions (no direct repository calls except in Seeds)
-- [ ] Assertions check ViewModel state, not repository state
+- [ ] All UI tests compile without errors
+- [ ] All UI tests pass (`xcodebuild test` exits with code 0)
+- [ ] Critical user journeys are fully covered via UI automation
+- [ ] Accessibility identifiers are correctly implemented for all interactive elements
+- [ ] Edge cases are covered via UI-level validation
 
 **Rationale**: TDD ensures code correctness from the start, provides living documentation, enables safe refactoring, and catches regressions immediately. Requiring passing tests before human review maximizes review efficiency.
 
@@ -903,6 +900,82 @@ func debugLog(_ message: String) {
 }
 ```
 
+### AI-Friendly UI Testing
+
+UI tests MUST provide maximum context for AI-assisted debugging. Use the `AIFriendlyUITestCase` base class for all UI tests.
+
+#### Required Base Class
+
+All UI test classes MUST inherit from `AIFriendlyUITestCase`:
+
+```swift
+class WorksheetMakerUITests: AIFriendlyUITestCase {
+    func testCreateWorksheet_EnterName_ShowsPreview() throws {
+        step("Wait for app to load") {
+            let tabBar = app.tabBars.firstMatch
+            XCTAssertTrue(tabBar.waitForExistence(timeout: 10))
+        }
+        
+        step("Enter student name") {
+            let contentTextField = app.textFields["contentTextField"]
+            XCTAssertTrue(contentTextField.waitForExistence(timeout: 5))
+            contentTextField.tap()
+            contentTextField.typeText("Liam")
+            takeScreenshot(named: "NameEntered")
+        }
+        
+        step("Verify preview updates") {
+            let preview = app.otherElements["worksheetPreview"]
+            XCTAssertTrue(preview.waitForExistence(timeout: 5))
+        }
+    }
+}
+```
+
+#### AI-Friendly Output Requirements
+
+| Context Type | How to Provide | Purpose |
+|--------------|----------------|---------|
+| **Test structure** | `step()` wrapper (uses `XCTContext.runActivity`) | Grouped steps in reports |
+| **Visual state** | `takeScreenshot(named:)` at key points | AI can see exact UI state |
+| **Element tree** | Auto-captured on failure via `dumpElementHierarchy()` | AI understands available elements |
+| **Failure details** | Custom assertion messages with state | AI knows what went wrong |
+| **Machine-readable results** | Parse `.xcresult` with `xcresultparser` | JUnit/JSON/Markdown output |
+
+#### Accessibility Identifier Conventions
+
+| Element Type | Pattern | Example |
+|--------------|---------|---------|
+| Text Fields | `{purpose}TextField` | `contentTextField`, `studentNameField` |
+| Buttons | `{action}Button` | `printButton`, `saveStudentButton` |
+| Toggles/Switches | `{feature}Toggle` | `traceableToggle` |
+| Pickers | `{setting}Picker` | `gradeLevelPicker` |
+| Preview Areas | `{content}Preview` | `worksheetPreview` |
+| Lists/Tables | `{items}List` | `studentsList` |
+
+#### Parsing Test Results for AI
+
+**Prerequisites** - Install these tools first:
+```bash
+brew install xcresultparser
+brew install ChargePoint/xcparse/xcparse
+```
+
+```bash
+# Run tests with result bundle
+xcodebuild test -scheme [AppName] \
+  -destination 'platform=iOS Simulator,name=iPhone 15' \
+  -resultBundlePath TestResults.xcresult
+
+# Parse to machine-readable formats
+xcresultparser -o junit TestResults.xcresult > junit.xml
+xcresultparser -o md TestResults.xcresult > test-summary.md
+xcresultparser -o cli TestResults.xcresult  # Colored terminal output
+
+# Extract screenshots
+xcparse screenshots TestResults.xcresult ./screenshots/
+```
+
 #### Why print() Doesn't Work in xcodebuild
 
 - `print()` outputs to stdout, but `xcodebuild` captures test runner output, not app stdout
@@ -941,4 +1014,4 @@ This constitution supersedes all other architectural practices for this project.
 - Amendments require: documentation of change, team review, migration plan for existing code
 - Use this constitution as the reference for architectural decisions
 
-**Version**: 5.1.0 | **Ratified**: 2026-01-12 | **Last Amended**: 2026-01-13
+**Version**: 5.2.0 | **Ratified**: 2026-01-12 | **Last Amended**: 2026-01-19
