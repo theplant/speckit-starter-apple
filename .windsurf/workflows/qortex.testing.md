@@ -23,7 +23,8 @@ This workflow guides adding tests and refactoring code for testability following
 5. **Screenshots MUST be captured at key points** - enables AI to see exact UI state
 6. **FAIL-FAST on app crashes** - Never wait for elements when app is not running; check app state before waits
 7. **3-SECOND MAX WAIT** - If an element doesn't appear within 3 seconds, the selector is likely wrong. Use root-cause-tracing to fix selectors, not longer timeouts.
-8. **AI MUST REVIEW EVERY SCREENSHOT** - After extracting test artifacts, AI MUST use `read_file` to view EVERY screenshot image. Check for:
+8. **ONE TEST PER USER STORY** - Each user story should have exactly ONE comprehensive test that covers the complete flow. This reduces test overhead and execution time while ensuring full coverage of the user journey.
+9. **AI MUST REVIEW EVERY SCREENSHOT** - After extracting test artifacts, AI MUST use `read_file` to view EVERY screenshot image. Check for:
    - **Upside-down/mirrored text** - Coordinate system bugs (common in CoreGraphics/CoreText)
    - **Misalignments** - Elements not properly aligned or positioned
    - **Text cut-off** - Labels or content truncated or clipped
@@ -244,54 +245,62 @@ struct TestSeeds {
 
 ### 5. Write UI Tests (Using AIFriendlyUITestCase)
 
-UI tests MUST inherit from `AIFriendlyUITestCase` and use the `step()` wrapper:
+UI tests MUST inherit from `AIFriendlyUITestCase` and use the `step()` wrapper.
+
+**IMPORTANT: ONE TEST PER USER STORY** - Each user story should have exactly ONE comprehensive test that covers ALL acceptance scenarios in a single flow. This approach:
+- Reduces test execution time (app launches once per user story)
+- Ensures the complete user journey is tested end-to-end
+- Avoids redundant setup/teardown overhead
+- Makes tests easier to maintain
 
 ```swift
-// WorksheetMakerUITests.swift
+// US1_WorksheetCreationTests.swift
 import XCTest
 
-final class WorksheetMakerUITests: AIFriendlyUITestCase {
+/// US1: Worksheet Creation
+/// One comprehensive test covering all acceptance scenarios
+final class US1_WorksheetCreationTests: AIFriendlyUITestCase {
     
-    func testCreateWorksheet_EnterName_ShowsPreview() throws {
-        step("Wait for app to load") {
+    /// Complete flow test for US1: Worksheet Creation
+    /// Covers: AC1 (enter name), AC2 (preview updates), AC3 (print enabled)
+    func test_US1_CompleteWorksheetCreationFlow() {
+        // AC1: User can enter student name
+        step("1. Wait for app to load") {
             let tabBar = app.tabBars.firstMatch
-            XCTAssertTrue(tabBar.waitForExistence(timeout: 10))
+            XCTAssertTrue(tabBar.waitForExistence(timeout: 3))
+            takeScreenshot(named: "US1-Step1-AppLoaded")
         }
         
-        step("Enter student name") {
+        step("2. Enter student name") {
             let contentTextField = app.textFields["contentTextField"]
-            XCTAssertTrue(contentTextField.waitForExistence(timeout: 5))
+            XCTAssertTrue(contentTextField.waitForExistence(timeout: 3))
             contentTextField.tap()
             contentTextField.typeText("Liam")
-            takeScreenshot(named: "NameEntered")
+            takeScreenshot(named: "US1-Step2-NameEntered")
         }
         
-        step("Verify preview updates") {
+        // AC2: Preview updates when name is entered
+        step("3. Verify preview updates with name") {
             let preview = app.otherElements["worksheetPreview"]
-            XCTAssertTrue(preview.waitForExistence(timeout: 5))
-            takeScreenshot(named: "PreviewVisible")
-        }
-    }
-    
-    func testPrintButton_EnabledWhenTextEntered() throws {
-        step("Wait for app to load") {
-            let tabBar = app.tabBars.firstMatch
-            XCTAssertTrue(tabBar.waitForExistence(timeout: 10))
+            XCTAssertTrue(preview.waitForExistence(timeout: 3))
+            takeScreenshot(named: "US1-Step3-PreviewVisible")
         }
         
-        step("Enter text") {
-            let contentTextField = app.textFields["contentTextField"]
-            XCTAssertTrue(contentTextField.waitForExistence(timeout: 5))
-            contentTextField.tap()
-            contentTextField.typeText("Emma")
-        }
-        
-        step("Verify print button is enabled") {
+        // AC3: Print button becomes enabled
+        step("4. Verify print button is enabled") {
             let printButton = app.buttons["printButton"]
-            XCTAssertTrue(printButton.waitForExistence(timeout: 5))
+            XCTAssertTrue(printButton.waitForExistence(timeout: 3))
             XCTAssertTrue(printButton.isEnabled, 
                 "Print button should be enabled after entering text")
-            takeScreenshot(named: "PrintButtonEnabled")
+            takeScreenshot(named: "US1-Step4-PrintEnabled")
+        }
+        
+        // AC4: User can tap print button
+        step("5. Tap print button and verify print dialog") {
+            let printButton = app.buttons["printButton"]
+            printButton.tap()
+            // Verify print dialog or confirmation appears
+            takeScreenshot(named: "US1-Step5-PrintTapped")
         }
     }
 }
